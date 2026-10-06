@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f7fb">
+  <title>Fplus Admin</title>
+  <link rel="stylesheet" href="/admin.css">
+  <script src="/admin.js" defer></script>
+</head>
+<body>
+  <main id="loginScreen" class="login-screen">
+    <form id="loginForm" class="login-card">
+      <div class="brand-mark">F</div>
+      <p class="eyebrow">LOCAL STORE MANAGEMENT</p>
+      <h1>Fplus Admin</h1>
+      <p class="muted">Sign in to manage your apps, versions, and registered devices.</p>
+      <label>Username<input name="username" autocomplete="username" required></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="primary wide" type="submit">Sign in</button>
+      <p class="form-error" id="loginError" role="alert"></p>
+    </form>
+  </main>
+
+  <div id="adminApp" class="admin-shell" hidden>
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="#" data-page="dashboard"><span class="brand-mark small">F</span><span>Fplus <small>ADMIN</small></span></a>
+      <nav id="navigation" aria-label="Admin navigation">
+        <button class="nav-item active" data-page="dashboard"><span>⌂</span>Dashboard</button>
+        <button class="nav-item" data-page="apps"><span>▦</span>Apps</button>
+        <button class="nav-item" data-page="users"><span>♙</span>Users</button>
+        <button class="nav-item" data-page="devices"><span>▣</span>Devices</button>
+        <button class="nav-item" data-page="certificates"><span>⚿</span>Certificates</button>
+        <button class="nav-item" data-page="updates"><span>↻</span>Store Updates</button>
+        <button class="nav-item" data-page="logs"><span>≡</span>Audit Logs</button>
+        <button class="nav-item" data-page="settings"><span>⚙</span>Settings</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <span class="server-indicator"><i></i> Local server</span>
+        <button id="logoutButton" class="logout-button" type="button">Sign out</button>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <header class="topbar">
+        <button id="menuButton" class="icon-button menu-button" aria-label="Open navigation" type="button">☰</button>
+        <div><p class="eyebrow">STORE MANAGEMENT</p><h1 id="pageHeading">Dashboard</h1></div>
+        <span class="server-pill"><i></i> API online</span>
+      </header>
+      <div id="notice" class="notice" role="status" hidden></div>
+      <main id="pageContent" class="page-content"></main>
+      <footer>Files are stored locally on this server. Signing packages are not delivered until device entitlement checks are configured.</footer>
+    </section>
+  </div>
+</body>
+</html>

@@ -1,0 +1,12 @@
+.DS_Store
+packages
+Payload
+*UserInterfaceState.xcuserstate
+xcuserdata/
+deps
+backend/.env
+backend/data/
+backend/storage/
+backend/node_modules/
+backend/lan-*.pem
+backend/*.crt

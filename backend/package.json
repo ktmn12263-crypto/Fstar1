@@ -1,0 +1,18 @@
+{
+  "name": "fplus-local-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "bplist-parser": "0.3.2",
+    "plist": "3.1.0",
+    "yauzl": "3.2.0"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test"
+  }
+}
