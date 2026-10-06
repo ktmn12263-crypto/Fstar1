@@ -7,7 +7,7 @@
 //
 
 import Foundation
-import ZsignSwift
+import Zsign
 import OSLog
 
 class TweakHandler {
@@ -426,3 +426,4 @@ enum TweakHandlerError: Error {
 	case missingFile(String)
 	case noAccess
 }
+

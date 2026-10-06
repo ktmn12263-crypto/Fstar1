@@ -7,7 +7,7 @@
 
 import CoreData
 import UIKit.UIImpactFeedbackGenerator
-import ZsignSwift
+import Zsign
 
 // MARK: - Class extension: certificate
 extension Storage {
@@ -95,3 +95,4 @@ extension Storage {
 		return FileManager.default.certificates(uuid)
 	}
 }
+

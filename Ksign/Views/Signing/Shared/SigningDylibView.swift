@@ -7,7 +7,7 @@
 
 import SwiftUI
 import NimbleViews
-import ZsignSwift
+import Zsign
 
 // MARK: - View
 struct SigningDylibView: View {
@@ -54,3 +54,4 @@ extension SigningDylibView {
 		_hiddenDylibCount = allDylibs.count - _dylibs.count
 	}
 }
+

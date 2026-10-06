@@ -7,7 +7,7 @@
 
 import SwiftUI
 import NimbleViews
-import ZsignSwift
+import Zsign
 
 struct DylibsView: View {
     var app: AppInfoPresentable
@@ -154,3 +154,4 @@ struct DylibsView: View {
     }
     
 }
+
