@@ -18,8 +18,6 @@ manual:
   - name: "Zsign"
     file: "Zsign/LICENSE"
 
-  - name: "LiveContainer"
-    file: "Zsign/LICENSE_LC"
     
   - name: "ElleKit"
     file: "LICENSE_EllEKIT"
