@@ -34,6 +34,12 @@ struct SettingsView: View {
 	// MARK: Body
     var body: some View {
 		Form {
+			Section("Fplus") {
+				NavigationLink(destination: FplusAccountView()) {
+					Label("Fplus Server & Account", systemImage: "server.rack")
+				}
+			}
+
 //				#if !NIGHTLY && !DEBUG
 				SettingsDonationCellView(site: _donationsUrl)
 //				#endif

@@ -55,11 +55,11 @@ enum TabEnum: String, CaseIterable, Hashable {
 	
 	static var defaultTabs: [TabEnum] {
 		return [
-            .files,
-            .library,
-            .appstore,
-            .downloader,
 			.fplus,
+			.files,
+			.library,
+			.appstore,
+			.downloader,
 		]
 	}
 	
