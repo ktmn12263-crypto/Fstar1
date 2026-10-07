@@ -416,8 +416,10 @@ final class FplusStoreViewModel: ObservableObject {
 		guard FplusAPIClient.isNewer(appUpdate.latestVersion, than: currentVersion) else { return nil }
 		return appUpdate
 	}
+}
 
-	private static func isNewer(_ candidate: String, than current: String) -> Bool {
+extension FplusAPIClient {
+	static func isNewer(_ candidate: String, than current: String) -> Bool {
 		let candidateParts = candidate.split(separator: ".").compactMap { Int($0) }
 		let currentParts = current.split(separator: ".").compactMap { Int($0) }
 		guard !candidateParts.isEmpty, candidateParts.count == candidate.split(separator: ".").count else { return false }

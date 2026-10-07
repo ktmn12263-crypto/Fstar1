@@ -28,7 +28,7 @@ struct FplusAccountView: View {
 	}
 
 	var body: some View {
-		Form {
+		NBList("Fplus Account") {
 			Section(header: Text("Fplus Server")) {
 				TextField("https://192.168.1.10:4317", text: $apiBaseURL)
 					.textContentType(.URL)
@@ -122,8 +122,6 @@ struct FplusAccountView: View {
 				}
 			}
 		}
-		.navigationTitle("Fplus Account")
-		.navigationBarTitleDisplayMode(.inline)
 		.alert(alertTitle, isPresented: $showAlert) {
 			Button("OK", role: .cancel) {}
 		} message: {
