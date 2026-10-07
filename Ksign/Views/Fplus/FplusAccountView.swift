@@ -29,18 +29,20 @@ struct FplusAccountView: View {
 
 	var body: some View {
 		NBList("Fplus Account") {
-			Section(header: Text("Fplus Server")) {
+			Section {
 				TextField("https://192.168.1.10:4317", text: $apiBaseURL)
 					.textContentType(.URL)
 					.keyboardType(.URL)
 					.textInputAutocapitalization(.never)
 					.autocorrectionDisabled()
+			} header: {
+				Text("Fplus Server")
 			} footer: {
 				Text("Enter the HTTPS address of your Fplus server (PC network IP or domain).")
 			}
 
 			if sessionToken.isEmpty {
-				Section(header: Text("Account Sign In")) {
+				Section {
 					TextField("Username", text: $usernameInput)
 						.textInputAutocapitalization(.never)
 						.autocorrectionDisabled()
@@ -58,11 +60,13 @@ struct FplusAccountView: View {
 						}
 					}
 					.disabled(isLoading || usernameInput.trimmingCharacters(in: .whitespaces).isEmpty || passwordInput.isEmpty)
+				} header: {
+					Text("Account Sign In")
 				} footer: {
 					Text("Sign in with the customer account created by your store administrator.")
 				}
 			} else {
-				Section(header: Text("Signed In Account")) {
+				Section {
 					LabeledContent("User", value: loggedInUsername)
 					Button("Sign Out", role: .destructive) {
 						sessionToken = ""
@@ -71,9 +75,11 @@ struct FplusAccountView: View {
 						deviceStatusText = "Unknown"
 						deviceStatusColor = .secondary
 					}
+				} header: {
+					Text("Signed In Account")
 				}
 
-				Section(header: Text("Device Status")) {
+				Section {
 					LabeledContent("Device Name", value: deviceName)
 					LabeledContent("Identifier", value: String(deviceIdentifier.prefix(12)) + "...")
 					HStack {
@@ -89,6 +95,8 @@ struct FplusAccountView: View {
 					} label: {
 						Text("Register / Refresh Device")
 					}
+				} header: {
+					Text("Device Status")
 				} footer: {
 					if deviceStatusText == "pending" {
 						Text("Device registration is pending administrator approval in the Admin Panel.")
@@ -98,7 +106,7 @@ struct FplusAccountView: View {
 				}
 
 				if deviceStatusText == "active" {
-					Section(header: Text("Signing Certificate")) {
+					Section {
 						Button {
 							Task { await _syncSigningCertificate() }
 						} label: {
@@ -108,18 +116,22 @@ struct FplusAccountView: View {
 							}
 						}
 						.disabled(isLoading)
+					} header: {
+						Text("Signing Certificate")
 					} footer: {
 						Text("Downloads your authorized certificate package and imports it directly into KSign's signing engine for local IPA signing.")
 					}
 				}
 			}
 
-			Section(header: Text("KSign Settings")) {
+			Section {
 				NavigationLink {
 					SettingsView()
 				} label: {
 					Label("KSign App Settings", systemImage: "gearshape.2")
 				}
+			} header: {
+				Text("KSign Settings")
 			}
 		}
 		.alert(alertTitle, isPresented: $showAlert) {
