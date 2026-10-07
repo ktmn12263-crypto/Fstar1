@@ -85,47 +85,45 @@ final class SigningHandler: NSObject {
 			try await _removeFiles(for: movedAppPath, from: _options.removeFiles)
 		}
 		
-        try await _removeCodeSignature(for: movedAppPath)
+		try await _removeCodeSignature(for: movedAppPath)
 		try await _removeProvisioning(for: movedAppPath)
 		
-        try await _inject(for: movedAppPath, with: _options.injectionFiles, with: _options)
-        
-        if _options.experiment_supportLiquidGlass {
-            try await _locateMachosAndChangeToSDK26(for: movedAppPath)
-        }
-        
-        if _options.experiment_replaceSubstrateWithEllekit {
-            try await _inject(for: movedAppPath, with: _options.injectionFiles, with: _options)
-        } else {
-            if !_options.injectionFiles.isEmpty {
-                try await _inject(for: movedAppPath, with: _options.injectionFiles, with: _options)
-            }
-        }
-        
-        if #available(iOS 19, *) {
-            try await _locateMachosAndFixupArm64eSlice(for: movedAppPath)
-        }
+		try await _inject(for: movedAppPath, with: _options.injectionFiles, with: _options)
 		
-        let handler = ZsignHandler(appUrl: movedAppPath, options: _options, cert: appCertificate)
-        try await handler.disinject()
+		if _options.experiment_supportLiquidGlass {
+			try await _locateMachosAndChangeToSDK26(for: movedAppPath)
+		}
+		
+		if _options.experiment_replaceSubstrateWithEllekit {
+			try await _inject(for: movedAppPath, with: _options.injectionFiles, with: _options)
+		} else {
+			if !_options.injectionFiles.isEmpty {
+				try await _inject(for: movedAppPath, with: _options.injectionFiles, with: _options)
+			}
+		}
+		
+		if #available(iOS 19, *) {
+			try await _locateMachosAndFixupArm64eSlice(for: movedAppPath)
+		}
+		
+		let zsignHandler = ZsignHandler(appUrl: movedAppPath, options: _options, cert: appCertificate)
+		try await zsignHandler.disinject()
 		
 		if !_options.onlyModify {
-			let handler = ZsignHandler(appUrl: movedAppPath, options: _options, cert: appCertificate)
-			
 			if _options.doAdhocSigning {
-				try await handler.adhocSign()
-			} else if (appCertificate != nil) {
-				try await handler.sign()
+				try await zsignHandler.adhocSign()
+			} else if appCertificate != nil {
+				try await zsignHandler.sign()
 			} else {
 				throw SigningFileHandlerError.missingCertifcate
 			}
 		}
-        try await self.move()
-        try await self.addToDatabase()
+		try await self.move()
+		try await self.addToDatabase()
 
-        if let error = handler.hadError {
-            throw error
-        }
+		if let error = zsignHandler.hadError {
+			throw error
+		}
 	}
 	
 	func move() async throws {
@@ -151,20 +149,20 @@ final class SigningHandler: NSObject {
 			return
 		}
 		
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            let bundle = Bundle(url: appUrl)
+		await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+			let bundle = Bundle(url: appUrl)
 
-            Storage.shared.addSigned(
-                uuid: _uuid,
-                certificate: _options.doAdhocSigning ? nil : appCertificate,
-                appName: bundle?.name,
-                appIdentifier: bundle?.bundleIdentifier,
-                appVersion: bundle?.version,
-                appIcon: bundle?.iconFileName
-            ) { _ in
-                Logger.signing.info("[\(self._uuid)] Added to database")
-                continuation.resume()
-            }
+			Storage.shared.addSigned(
+				uuid: _uuid,
+				certificate: _options.doAdhocSigning ? nil : appCertificate,
+				appName: bundle?.name,
+				appIdentifier: bundle?.bundleIdentifier,
+				appVersion: bundle?.version,
+				appIcon: bundle?.iconFileName
+			) { _ in
+				Logger.signing.info("[\(self._uuid)] Added to database")
+				continuation.resume()
+			}
 		}
 	}
 	
@@ -282,11 +280,11 @@ extension SigningHandler {
 			dictionary.write(toFile: plistURL.path, atomically: true)
 		}
 	}
-    
-    private func _removeCodeSignature(for app: URL) async throws {
-        let provisioningFilePath = app.appendingPathComponent("_CodeSignature")
-        try _fileManager.removeFileIfNeeded(at: provisioningFilePath)
-    }
+	
+	private func _removeCodeSignature(for app: URL) async throws {
+		let provisioningFilePath = app.appendingPathComponent("_CodeSignature")
+		try _fileManager.removeFileIfNeeded(at: provisioningFilePath)
+	}
 	
 	private func _removeProvisioning(for app: URL) async throws {
 		let provisioningFilePath = app.appendingPathComponent("embedded.mobileprovision")
@@ -301,50 +299,51 @@ extension SigningHandler {
 			throw error
 		}
 	}
-    private func _locateMachosAndChangeToSDK26(for app: URL) async throws {
-        if let url = Bundle(url: app)?.executableURL {
-            LCPatchMachOForSDK26(app.appendingPathComponent(url.relativePath).relativePath)
-        }
-    }
-    
-    @available(iOS 19, *)
-    private func _locateMachosAndFixupArm64eSlice(for app: URL) async throws {
-        let machoFiles = _enumerateFiles(at: app) {
-            $0.hasSuffix(".dylib") || $0.hasSuffix(".framework")
-        }
-        
-        for fileURL in machoFiles {
-            switch fileURL.pathExtension {
-            case "dylib":
-                LCPatchMachOFixupARM64eSlice(fileURL.path)
-            case "framework":
-                if
-                    let bundle = Bundle(url: fileURL),
-                    let execURL = bundle.executableURL
-                {
-                    LCPatchMachOFixupARM64eSlice(execURL.path)
-                }
-            default:
-                continue
-            }
-        }
-    }
-    
-    private func _enumerateFiles(at base: URL, where predicate: (String) -> Bool) -> [URL] {
-        guard let fileEnum = _fileManager.enumerator(atPath: base.path) else {
-            return []
-        }
-        
-        var results: [URL] = []
-        
-        while let file = fileEnum.nextObject() as? String {
-            if predicate(file) {
-                results.append(base.appendingPathComponent(file))
-            }
-        }
-        
-        return results
-    }
+	
+	private func _locateMachosAndChangeToSDK26(for app: URL) async throws {
+		if let url = Bundle(url: app)?.executableURL {
+			LCPatchMachOForSDK26(app.appendingPathComponent(url.relativePath).relativePath)
+		}
+	}
+	
+	@available(iOS 19, *)
+	private func _locateMachosAndFixupArm64eSlice(for app: URL) async throws {
+		let machoFiles = _enumerateFiles(at: app) {
+			$0.hasSuffix(".dylib") || $0.hasSuffix(".framework")
+		}
+		
+		for fileURL in machoFiles {
+			switch fileURL.pathExtension {
+			case "dylib":
+				LCPatchMachOFixupARM64eSlice(fileURL.path)
+			case "framework":
+				if
+					let bundle = Bundle(url: fileURL),
+					let execURL = bundle.executableURL
+				{
+					LCPatchMachOFixupARM64eSlice(execURL.path)
+				}
+			default:
+				continue
+			}
+		}
+	}
+	
+	private func _enumerateFiles(at base: URL, where predicate: (String) -> Bool) -> [URL] {
+		guard let fileEnum = _fileManager.enumerator(atPath: base.path) else {
+			return []
+		}
+		
+		var results: [URL] = []
+		
+		while let file = fileEnum.nextObject() as? String {
+			if predicate(file) {
+				results.append(base.appendingPathComponent(file))
+			}
+		}
+		
+		return results
+	}
 }
 
 enum SigningFileHandlerError: Error, LocalizedError {
@@ -353,6 +352,7 @@ enum SigningFileHandlerError: Error, LocalizedError {
 	case missingCertifcate
 	case disinjectFailed
 	case signFailed
+	case zsignFailed
 	
 	var errorDescription: String? {
 		switch self {
@@ -366,6 +366,8 @@ enum SigningFileHandlerError: Error, LocalizedError {
 			return "Removing mach-O load paths failed."
 		case .signFailed:
 			return "Signing failed."
+		case .zsignFailed:
+			return "Zsign signing failed."
 		}
 	}
 }
