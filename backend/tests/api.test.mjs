@@ -80,7 +80,9 @@ test("Fplus API authenticates, publishes a verified IPA, and gates signing packa
       JWT_SECRET: randomBytes(32).toString("hex"),
       ENCRYPTION_KEY: randomBytes(32).toString("hex"),
       ADMIN_USERNAME: "test-admin",
-      ADMIN_PASSWORD: adminPassword
+      ADMIN_PASSWORD: adminPassword,
+      TLS_CERT_PATH: "",
+      TLS_KEY_PATH: ""
     },
     stdio: ["ignore", "pipe", "pipe"]
   });

@@ -902,7 +902,8 @@ async function handleApi(req, res, url) {
 }
 
 async function serveAdmin(req, res, pathname) {
-  const requested = pathname === "/" ? "/index.html" : pathname;
+  let requested = pathname === "/" || pathname === "/admin" || pathname === "/admin/" ? "/index.html" : pathname;
+  if (requested.startsWith("/admin/")) requested = requested.replace(/^\/admin/, "");
   const resolved = path.resolve(adminRoot, `.${requested}`);
   if (resolved !== adminRoot && !resolved.startsWith(`${adminRoot}${path.sep}`)) return sendError(res, 404, "Not found");
   let filePath = resolved;
