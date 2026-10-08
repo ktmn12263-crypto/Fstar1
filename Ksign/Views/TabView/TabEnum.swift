@@ -16,6 +16,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 	case certificates
 	case appstore
     case downloader
+    case customPage
 	var title: String {
 		switch self {
         case .files:        return .localized("Files")
@@ -25,6 +26,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 		case .certificates:	return .localized("Certificates")
 		case .appstore: 	return .localized("App Store")
         case .downloader:   return .localized("Downloads")
+        case .customPage:   return "Portal"
 		}
 	}
 	
@@ -36,7 +38,8 @@ enum TabEnum: String, CaseIterable, Hashable {
         case .fplus: 		return "bag"
 		case .certificates: return "person.text.rectangle"
 		case .appstore: 	return "plus.app.fill"
-        case .downloader:    return "square.and.arrow.down.fill"
+        case .downloader:   return "square.and.arrow.down.fill"
+        case .customPage:   return "safari"
 		}
 	}
 	
@@ -50,6 +53,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 		case .certificates: NBNavigationView(.localized("Certificates")) { CertificatesView() }
 		case .appstore: AppstoreView()
         case .downloader: DownloaderView()
+        case .customPage: NBNavigationView("Portal") { FplusWebPageView() }
 		}
 	}
 	
@@ -65,7 +69,8 @@ enum TabEnum: String, CaseIterable, Hashable {
 	
 	static var customizableTabs: [TabEnum] {
 		return [
-			.certificates
+			.certificates,
+			.customPage
 		]
 	}
 }

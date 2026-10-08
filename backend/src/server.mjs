@@ -947,6 +947,49 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  // ── Custom Pages (server-driven UI) ──────────────────────────────────────────
+  // Public: GET /api/store/page/:slug — returns { html, title, updated_at }
+  if (parts[0] === "api" && parts[1] === "store" && parts[2] === "page" && parts.length === 4 && method === "GET") {
+    const slug = parts[3];
+    if (!/^[a-z0-9_-]{1,64}$/i.test(slug)) return sendError(res, 400, "Invalid page slug");
+    const page = database.prepare("SELECT title, html_content, updated_at FROM custom_pages WHERE slug = ?").get(slug);
+    if (!page) return sendError(res, 404, "Page not found");
+    sendJson(res, 200, { title: page.title, html: page.html_content, updated_at: page.updated_at });
+    return;
+  }
+
+  // Admin: GET /api/admin/pages — list all pages
+  if (pathname === "/api/admin/pages" && method === "GET") {
+    const pages = database.prepare("SELECT slug, title, updated_at FROM custom_pages ORDER BY slug").all();
+    sendJson(res, 200, { pages });
+    return;
+  }
+
+  // Admin: PUT /api/admin/pages/:slug — create or update a page
+  if (parts[0] === "api" && parts[1] === "admin" && parts[2] === "pages" && parts.length === 4 && method === "PUT") {
+    const slug = parts[3];
+    if (!/^[a-z0-9_-]{1,64}$/i.test(slug)) return sendError(res, 400, "Invalid slug. Use lowercase letters, numbers, hyphens only.");
+    const body = await readJson(req, 512_000);
+    const title = text(body.title, "title", 200, false) || slug;
+    const html = typeof body.html === "string" ? body.html.slice(0, 500_000) : "";
+    const timestamp = now();
+    database.prepare(`
+      INSERT INTO custom_pages (slug, title, html_content, updated_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(slug) DO UPDATE SET title = excluded.title, html_content = excluded.html_content, updated_at = excluded.updated_at
+    `).run(slug, title, html, timestamp);
+    recordAudit(req, "page.update", slug);
+    sendJson(res, 200, { ok: true, slug, updated_at: timestamp });
+    return;
+  }
+
+  // Admin: DELETE /api/admin/pages/:slug
+  if (parts[0] === "api" && parts[1] === "admin" && parts[2] === "pages" && parts.length === 4 && method === "DELETE") {
+    const slug = parts[3];
+    database.prepare("DELETE FROM custom_pages WHERE slug = ?").run(slug);
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
   sendError(res, 404, "Endpoint not found");
 }
 

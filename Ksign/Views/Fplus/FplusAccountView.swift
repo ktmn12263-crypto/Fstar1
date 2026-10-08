@@ -6,6 +6,8 @@ struct FplusAccountView: View {
 	@AppStorage("Fplus.sessionToken") private var sessionToken = ""
 	@AppStorage("Fplus.username") private var loggedInUsername = ""
 	@AppStorage("Fplus.registeredDeviceId") private var registeredDeviceId = ""
+	@AppStorage("fplus_custom_page_slug") private var customPageSlug = "home"
+	@AppStorage("fplus_server_url") private var fplusServerURL: String = ""
 
 	@State private var usernameInput = ""
 	@State private var passwordInput = ""
@@ -35,10 +37,30 @@ struct FplusAccountView: View {
 					.keyboardType(.URL)
 					.textInputAutocapitalization(.never)
 					.autocorrectionDisabled()
+					.onChange(of: apiBaseURL) { _, new in fplusServerURL = new }
 			} header: {
 				Text("Fplus Server")
 			} footer: {
 				Text("Enter the HTTPS address of your Fplus server (PC network IP or domain).")
+			}
+
+			Section {
+				TextField("e.g. home", text: $customPageSlug)
+					.textInputAutocapitalization(.never)
+					.autocorrectionDisabled()
+
+				NavigationLink {
+					FplusWebPageView()
+				} label: {
+					HStack {
+						Image(systemName: "globe")
+						Text("Open Custom Page")
+					}
+				}
+			} header: {
+				Text("Custom Page")
+			} footer: {
+				Text("Design your own interface (buttons, banners, links) in Admin Panel → Custom Pages without rebuilding the app.")
 			}
 
 			if sessionToken.isEmpty {

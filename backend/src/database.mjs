@@ -143,12 +143,62 @@ if (!database.prepare("SELECT version FROM schema_migrations WHERE version = ?")
 if (!database.prepare("SELECT version FROM schema_migrations WHERE version = ?").get("003_user_certificate")) {
   database.exec("BEGIN IMMEDIATE");
   try {
-    database.exec(`
-      ALTER TABLE users ADD COLUMN certificate_id TEXT REFERENCES signing_certificates(id) ON DELETE SET NULL;
-      ALTER TABLE users ADD COLUMN plain_password TEXT;
-    `);
+    database.exec("ALTER TABLE users ADD COLUMN certificate_id TEXT REFERENCES signing_certificates(id) ON DELETE SET NULL;");
+    database.exec("ALTER TABLE users ADD COLUMN plain_password TEXT;");
     database.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)")
       .run("003_user_certificate", new Date().toISOString());
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+if (!database.prepare("SELECT version FROM schema_migrations WHERE version = ?").get("004_external_download_url")) {
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    database.exec(`
+      ALTER TABLE app_versions ADD COLUMN external_url TEXT;
+    `);
+    database.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)")
+      .run("004_external_download_url", new Date().toISOString());
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+// Migration 005: ensure user columns added by 003 actually exist (003 may have partially failed
+// on existing DBs because SQLite rejects multiple ALTER TABLEs in one exec() call).
+if (!database.prepare("SELECT version FROM schema_migrations WHERE version = ?").get("005_ensure_user_columns")) {
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    const cols = database.prepare("PRAGMA table_info(users)").all().map((c) => c.name);
+    if (!cols.includes("certificate_id"))
+      database.exec("ALTER TABLE users ADD COLUMN certificate_id TEXT REFERENCES signing_certificates(id) ON DELETE SET NULL;");
+    if (!cols.includes("plain_password"))
+      database.exec("ALTER TABLE users ADD COLUMN plain_password TEXT;");
+    database.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)")
+      .run("005_ensure_user_columns", new Date().toISOString());
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+if (!database.prepare("SELECT version FROM schema_migrations WHERE version = ?").get("006_custom_pages")) {
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    database.exec(`CREATE TABLE IF NOT EXISTS custom_pages (
+      slug TEXT PRIMARY KEY,
+      title TEXT NOT NULL DEFAULT '',
+      html_content TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL
+    );`);
+    database.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)")
+      .run("006_custom_pages", new Date().toISOString());
     database.exec("COMMIT");
   } catch (error) {
     database.exec("ROLLBACK");

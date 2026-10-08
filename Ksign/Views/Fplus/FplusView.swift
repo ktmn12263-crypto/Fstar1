@@ -46,7 +46,14 @@ struct FplusView: View {
 			.navigationTitle("Fplus")
 			.searchable(text: $searchText, prompt: .localized("Search apps"))
 			.toolbar {
-				ToolbarItem(placement: .topBarTrailing) {
+				ToolbarItemGroup(placement: .topBarTrailing) {
+					NavigationLink {
+						FplusWebPageView()
+					} label: {
+						Image(systemName: "safari")
+					}
+					.accessibilityLabel("Custom Portal")
+
 					NavigationLink {
 						FplusAccountView()
 					} label: {

@@ -1,6 +1,7 @@
 const pages = new Map([
   ["dashboard", "Dashboard"], ["apps", "Apps"], ["users", "Users"],
-  ["devices", "Devices"], ["certificates", "Certificates"], ["updates", "Store Updates"], ["logs", "Audit Logs"], ["settings", "Settings"]
+  ["devices", "Devices"], ["certificates", "Certificates"], ["updates", "Store Updates"],
+  ["pages", "Custom Pages"], ["logs", "Audit Logs"], ["settings", "Settings"]
 ]);
 const content = document.getElementById("pageContent");
 const notice = document.getElementById("notice");
@@ -69,6 +70,7 @@ async function renderPage() {
   if (currentPage === "devices") return renderDevices();
   if (currentPage === "certificates") return renderCertificates();
   if (currentPage === "updates") return renderUpdates();
+  if (currentPage === "pages") return renderPages();
   if (currentPage === "logs") return renderLogs();
   if (currentPage === "settings") return renderSettings();
 }
@@ -357,9 +359,15 @@ async function renderUsers() {
                   <td><strong>${escapeHTML(user.username)}</strong></td>
                   <td>
                     <div style="display:flex;align-items:center;gap:6px">
-                      <input type="password" id="pass_${escapeHTML(user.id)}" value="${escapeHTML(user.plain_password || '••••••••')}" readonly style="width:130px;min-height:32px;padding:4px 8px;font-size:12px;background:#f8f9fb">
-                      <button type="button" class="secondary" data-toggle-pass="${escapeHTML(user.id)}" style="min-height:32px;padding:4px 8px;font-size:11px" title="Show/Hide">👁</button>
-                      <button type="button" class="quiet" data-change-pass="${escapeHTML(user.id)}" style="min-height:32px;padding:4px 8px;font-size:11px" title="Change Password">✏</button>
+                      <input type="password" id="pass_${escapeHTML(user.id)}"
+                        value="${escapeHTML(user.plain_password || '')}"
+                        data-has-plain="${user.plain_password ? '1' : '0'}"
+                        placeholder="••••••••"
+                        readonly style="width:130px;min-height:32px;padding:4px 8px;font-size:12px;background:#f8f9fb">
+                      <button type="button" class="secondary" data-toggle-pass="${escapeHTML(user.id)}"
+                        style="min-height:32px;padding:4px 8px;font-size:11px" title="Show/Hide">👁</button>
+                      <button type="button" class="quiet" data-change-pass="${escapeHTML(user.id)}"
+                        style="min-height:32px;padding:4px 8px;font-size:11px" title="Change Password">✏️</button>
                     </div>
                   </td>
                   <td>
@@ -416,7 +424,12 @@ async function renderUsers() {
   content.querySelectorAll("[data-toggle-pass]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const input = document.getElementById(`pass_${btn.dataset.togglePass}`);
-      if (input) input.type = input.type === "password" ? "text" : "password";
+      if (!input) return;
+      if (input.dataset.hasPlain === "0") {
+        inform("Password not stored in plain text — use Change Password to set a new one.", true);
+        return;
+      }
+      input.type = input.type === "password" ? "text" : "password";
     });
   });
 
@@ -692,3 +705,104 @@ document.querySelector(".brand").addEventListener("click", (event) => {
 });
 document.getElementById("menuButton").addEventListener("click", () => document.getElementById("sidebar").classList.toggle("open"));
 checkSession();
+
+// ── Custom Pages editor ─────────────────────────────────────────────────────
+async function renderPages() {
+  const result = await api("/api/admin/pages");
+  const existingPages = result.pages || [];
+
+  content.innerHTML = `${pageTitle("Custom Pages", "Design full custom pages with HTML + CSS + JS, editable live from this panel. The app loads them via WebView.")}
+    <section class="panel">
+      <h3>Create / edit a page</h3>
+      <form id="pageForm" class="stack-form">
+        <label>Slug (URL identifier)
+          <input name="slug" maxlength="64" placeholder="e.g. home, news, promo" pattern="[a-zA-Z0-9_-]+" required>
+          <small class="muted">Only letters, numbers, hyphens. Example: <code>home</code> → <code>/api/store/page/home</code></small>
+        </label>
+        <label>Page title<input name="title" maxlength="200" placeholder="My Custom Page"></label>
+        <label class="full">HTML content
+          <textarea name="html" style="min-height:320px;font-family:monospace;font-size:13px;white-space:pre;overflow-x:auto" placeholder="&lt;!-- Write full HTML here. You can include &lt;style&gt; and &lt;script&gt; tags. --&gt;"></textarea>
+        </label>
+        <div class="full" style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="primary" type="submit">Save page</button>
+          <button class="secondary" type="button" id="previewBtn">Preview in browser</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h3>Existing pages (${existingPages.length})</h3>
+      ${existingPages.length ? `
+      <div class="table-wrap"><table>
+        <thead><tr><th>Slug</th><th>Title</th><th>Last updated</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${existingPages.map((p) => `
+          <tr>
+            <td><code>${escapeHTML(p.slug)}</code></td>
+            <td>${escapeHTML(p.title)}</td>
+            <td>${escapeHTML(p.updated_at?.slice(0, 16).replace("T", " ") || "—")}</td>
+            <td><div class="row-actions">
+              <button class="secondary" type="button" data-edit-page="${escapeHTML(p.slug)}" style="font-size:11px;padding:4px 9px">Edit</button>
+              <button class="danger" type="button" data-delete-page="${escapeHTML(p.slug)}" style="font-size:11px;padding:4px 9px">Delete</button>
+            </div></td>
+          </tr>`).join("")}
+        </tbody>
+      </table></div>` : empty("No pages yet", "Use the form above to create your first custom page.")}
+    </section>
+
+    <section class="panel">
+      <h3>How to use in the iOS app</h3>
+      <p class="muted">The iOS app has a <strong>Custom Page</strong> tab that loads any page you create here. Set the slug in the app's Fplus settings. Each page is served at:</p>
+      <code style="display:block;padding:10px;background:#f4f4f4;border-radius:6px;margin-top:6px">https://&lt;your-server&gt;:4317/api/store/page/&lt;slug&gt;</code>
+      <p class="muted" style="margin-top:8px">The page loads inside a full-screen WebView. You can use HTML, CSS, and JavaScript freely. To make buttons call back to the server, use <code>fetch()</code> with your server URL.</p>
+    </section>`;
+
+  document.getElementById("pageForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const slug = form.get("slug").trim();
+    const title = form.get("title").trim();
+    const html = form.get("html");
+    try {
+      await api(`/api/admin/pages/${encodeURIComponent(slug)}`, { method: "PUT", body: { title, html } });
+      inform(`Page '${slug}' saved!`);
+      await renderPages();
+    } catch (error) { inform(error.message, true); }
+  });
+
+  document.getElementById("previewBtn").addEventListener("click", () => {
+    const form = document.getElementById("pageForm");
+    const html = form.querySelector("[name=html]").value;
+    const win = window.open("", "_blank");
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  });
+
+  content.querySelectorAll("[data-edit-page]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const slug = btn.dataset.editPage;
+      try {
+        const page = await api(`/api/store/page/${encodeURIComponent(slug)}`);
+        const form = document.getElementById("pageForm");
+        form.querySelector("[name=slug]").value = slug;
+        form.querySelector("[name=title]").value = page.title || "";
+        form.querySelector("[name=html]").value = page.html || "";
+        form.scrollIntoView({ behavior: "smooth" });
+        inform(`Loaded page '${slug}' for editing.`);
+      } catch (error) { inform(error.message, true); }
+    });
+  });
+
+  content.querySelectorAll("[data-delete-page]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const slug = btn.dataset.deletePage;
+      if (!confirm(`Delete page '${slug}'? This cannot be undone.`)) return;
+      try {
+        await api(`/api/admin/pages/${encodeURIComponent(slug)}`, { method: "DELETE" });
+        inform(`Page '${slug}' deleted.`);
+        await renderPages();
+      } catch (error) { inform(error.message, true); }
+    });
+  });
+}
