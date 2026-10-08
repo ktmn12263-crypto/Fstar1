@@ -7,7 +7,6 @@ struct FplusAccountView: View {
 	@AppStorage("Fplus.username") private var loggedInUsername = ""
 	@AppStorage("Fplus.registeredDeviceId") private var registeredDeviceId = ""
 	@AppStorage("fplus_custom_page_slug") private var customPageSlug = "home"
-	@AppStorage("fplus_server_url") private var fplusServerURL: String = ""
 
 	@State private var usernameInput = ""
 	@State private var passwordInput = ""
@@ -37,7 +36,6 @@ struct FplusAccountView: View {
 					.keyboardType(.URL)
 					.textInputAutocapitalization(.never)
 					.autocorrectionDisabled()
-					.onChange(of: apiBaseURL) { _, new in fplusServerURL = new }
 			} header: {
 				Text("Fplus Server")
 			} footer: {
