@@ -287,25 +287,178 @@ async function archiveApp(event) {
 }
 
 async function renderUsers() {
-  const result = await api("/api/admin/users");
+  const [result, certData] = await Promise.all([
+    api("/api/admin/users"),
+    api("/api/admin/certificates")
+  ]);
   const customers = result.users.filter((user) => user.role === "customer");
-  content.innerHTML = `${pageTitle("Users", "Create customer accounts used to register devices.")}
-    <section class="panel"><h3>Create customer account</h3><form id="userForm" class="inline-form">
-      <label>Username<input name="username" maxlength="64" required></label>
-      <label>Temporary password<input name="password" minlength="12" autocomplete="new-password" required></label>
-      <button class="primary" type="submit">Create account</button>
-    </form><p class="muted">Use a unique temporary password and deliver it to the customer through a secure channel. Passwords are never shown again.</p></section>
-    <section class="panel"><h3>Customer accounts (${customers.length})</h3>
-      ${customers.length ? `<div class="table-wrap"><table><thead><tr><th>Username</th><th>Status</th><th>Created</th></tr></thead><tbody>${customers.map((user) => `<tr><td>${escapeHTML(user.username)}</td><td><span class="badge ${escapeHTML(user.status)}">${escapeHTML(user.status)}</span></td><td>${escapeHTML(new Date(user.created_at).toLocaleString())}</td></tr>`).join("")}</tbody></table></div>` : empty("No customer accounts yet")}
+  const activeCerts = certData.certificates.filter((c) => c.status === "active");
+
+  content.innerHTML = `${pageTitle("Users Management", "Complete management for customer accounts: passwords, certificates, and status.")}
+    <section class="panel">
+      <h3>Create new customer account</h3>
+      <form id="userForm" class="stack-form">
+        <label>Username
+          <input name="username" maxlength="64" placeholder="e.g. omar_client" required>
+        </label>
+        <label>Password
+          <div style="display:flex;gap:6px">
+            <input name="password" id="newPassInput" minlength="6" placeholder="Account password" required>
+            <button type="button" class="secondary" id="genPassBtn" style="white-space:nowrap">Generate</button>
+          </div>
+        </label>
+        <label class="full">Assign Signing Certificate (Optional)
+          <select name="certificate_id">
+            <option value="">-- No certificate assigned yet --</option>
+            ${activeCerts.map((c) => `<option value="${escapeHTML(c.id)}">${escapeHTML(c.name)} (Expires: ${escapeHTML(c.expiration_date || "N/A")})</option>`).join("")}
+          </select>
+        </label>
+        <div class="full" style="margin-top:10px">
+          <button class="primary" type="submit">Create Customer</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h3>Customer accounts (${customers.length})</h3>
+      ${customers.length ? `
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Password</th>
+                <th>Assigned Certificate</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${customers.map((user) => `
+                <tr data-user-row="${escapeHTML(user.id)}">
+                  <td><strong>${escapeHTML(user.username)}</strong></td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <input type="password" id="pass_${escapeHTML(user.id)}" value="${escapeHTML(user.plain_password || '••••••••')}" readonly style="width:130px;min-height:32px;padding:4px 8px;font-size:12px;background:#f8f9fb">
+                      <button type="button" class="secondary" data-toggle-pass="${escapeHTML(user.id)}" style="min-height:32px;padding:4px 8px;font-size:11px" title="Show/Hide">👁</button>
+                      <button type="button" class="quiet" data-change-pass="${escapeHTML(user.id)}" style="min-height:32px;padding:4px 8px;font-size:11px" title="Change Password">✏</button>
+                    </div>
+                  </td>
+                  <td>
+                    <select data-user-cert="${escapeHTML(user.id)}" style="min-height:32px;padding:4px 8px;font-size:12px">
+                      <option value="">-- None --</option>
+                      ${activeCerts.map((c) => `<option value="${escapeHTML(c.id)}" ${user.certificate_id === c.id ? "selected" : ""}>${escapeHTML(c.name)}</option>`).join("")}
+                    </select>
+                  </td>
+                  <td>
+                    <span class="badge ${escapeHTML(user.status)}">${escapeHTML(user.status)}</span>
+                  </td>
+                  <td>
+                    <div class="row-actions">
+                      <button type="button" class="secondary" data-toggle-status="${escapeHTML(user.id)}" data-curr-status="${escapeHTML(user.status)}" style="min-height:32px;padding:4px 9px;font-size:11px">
+                        ${user.status === "active" ? "Disable" : "Enable"}
+                      </button>
+                      <button type="button" class="danger" data-delete-user="${escapeHTML(user.id)}" data-username="${escapeHTML(user.username)}" style="min-height:32px;padding:4px 9px;font-size:11px">
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      ` : empty("No customer accounts yet")}
     </section>`;
-  document.getElementById("userForm").addEventListener("submit", async (event) => {
+
+  document.getElementById("genPassBtn")?.addEventListener("click", () => {
+    const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%";
+    let pass = "";
+    for (let i = 0; i < 12; i++) pass += chars[Math.floor(Math.random() * chars.length)];
+    document.getElementById("newPassInput").value = pass;
+  });
+
+  document.getElementById("userForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     try {
-      await api("/api/admin/users", { method: "POST", body: { username: form.get("username"), password: form.get("password") } });
-      inform("Customer account created.");
+      await api("/api/admin/users", {
+        method: "POST",
+        body: {
+          username: form.get("username"),
+          password: form.get("password"),
+          certificate_id: form.get("certificate_id") || null
+        }
+      });
+      inform("Customer account created successfully!");
       await renderUsers();
     } catch (error) { inform(error.message, true); }
+  });
+
+  content.querySelectorAll("[data-toggle-pass]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const input = document.getElementById(`pass_${btn.dataset.togglePass}`);
+      if (input) input.type = input.type === "password" ? "text" : "password";
+    });
+  });
+
+  content.querySelectorAll("[data-change-pass]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const userId = btn.dataset.changePass;
+      const newPass = prompt("Enter new password for this user (minimum 6 characters):");
+      if (!newPass) return;
+      if (newPass.length < 6) return inform("Password must contain at least 6 characters.", true);
+      try {
+        await api(`/api/admin/users/${encodeURIComponent(userId)}`, {
+          method: "PUT",
+          body: { password: newPass }
+        });
+        inform("Password updated successfully!");
+        await renderUsers();
+      } catch (error) { inform(error.message, true); }
+    });
+  });
+
+  content.querySelectorAll("[data-user-cert]").forEach((select) => {
+    select.addEventListener("change", async () => {
+      const userId = select.dataset.userCert;
+      const certificateId = select.value || null;
+      try {
+        await api(`/api/admin/users/${encodeURIComponent(userId)}`, {
+          method: "PUT",
+          body: { certificate_id: certificateId }
+        });
+        inform("Certificate updated for user!");
+      } catch (error) { inform(error.message, true); }
+    });
+  });
+
+  content.querySelectorAll("[data-toggle-status]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const userId = btn.dataset.toggleStatus;
+      const newStatus = btn.dataset.currStatus === "active" ? "disabled" : "active";
+      try {
+        await api(`/api/admin/users/${encodeURIComponent(userId)}`, {
+          method: "PUT",
+          body: { status: newStatus }
+        });
+        inform(`User status changed to ${newStatus}.`);
+        await renderUsers();
+      } catch (error) { inform(error.message, true); }
+    });
+  });
+
+  content.querySelectorAll("[data-delete-user]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const userId = btn.dataset.deleteUser;
+      const username = btn.dataset.username;
+      if (!confirm(`Are you sure you want to delete user '${username}'?`)) return;
+      try {
+        await api(`/api/admin/users/${encodeURIComponent(userId)}`, { method: "DELETE" });
+        inform("User deleted.");
+        await renderUsers();
+      } catch (error) { inform(error.message, true); }
+    });
   });
 }
 

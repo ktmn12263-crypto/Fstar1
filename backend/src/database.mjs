@@ -140,6 +140,22 @@ if (!database.prepare("SELECT version FROM schema_migrations WHERE version = ?")
   }
 }
 
+if (!database.prepare("SELECT version FROM schema_migrations WHERE version = ?").get("003_user_certificate")) {
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    database.exec(`
+      ALTER TABLE users ADD COLUMN certificate_id TEXT REFERENCES signing_certificates(id) ON DELETE SET NULL;
+      ALTER TABLE users ADD COLUMN plain_password TEXT;
+    `);
+    database.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)")
+      .run("003_user_certificate", new Date().toISOString());
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+}
+
 function passwordHash(password, salt) {
   return scryptSync(password, salt, 64).toString("hex");
 }
@@ -150,15 +166,37 @@ export function verifyPassword(password, salt, expectedHash) {
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
-export function createUser({ username, password, role = "customer", status = "active" }) {
+export function createUser({ username, password, role = "customer", status = "active", certificateId = null }) {
   const salt = randomBytes(16).toString("hex");
   const now = new Date().toISOString();
   const id = randomUUID();
   database.prepare(`
-    INSERT INTO users (id, username, password_salt, password_hash, role, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(id, username, salt, passwordHash(password, salt), role, status, now);
-  return { id, username, role, status, created_at: now };
+    INSERT INTO users (id, username, password_salt, password_hash, role, status, certificate_id, plain_password, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, username, salt, passwordHash(password, salt), role, status, certificateId || null, password, now);
+  return { id, username, role, status, certificate_id: certificateId || null, plain_password: password, created_at: now };
+}
+
+export function updateUserPassword(userId, newPassword) {
+  const salt = randomBytes(16).toString("hex");
+  database.prepare(`
+    UPDATE users SET password_salt = ?, password_hash = ?, plain_password = ? WHERE id = ?
+  `).run(salt, passwordHash(newPassword, salt), newPassword, userId);
+  database.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
+}
+
+export function updateUser(userId, { status, certificateId }) {
+  if (status !== undefined && certificateId !== undefined) {
+    database.prepare("UPDATE users SET status = ?, certificate_id = ? WHERE id = ?").run(status, certificateId, userId);
+  } else if (status !== undefined) {
+    database.prepare("UPDATE users SET status = ? WHERE id = ?").run(status, userId);
+  } else if (certificateId !== undefined) {
+    database.prepare("UPDATE users SET certificate_id = ? WHERE id = ?").run(certificateId, userId);
+  }
+}
+
+export function deleteUser(userId) {
+  database.prepare("DELETE FROM users WHERE id = ?").run(userId);
 }
 
 const existingAdmin = database.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();

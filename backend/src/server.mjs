@@ -5,7 +5,7 @@ import path from "node:path";
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { config } from "./config.mjs";
-import { audit, createUser, database, verifyPassword } from "./database.mjs";
+import { audit, createUser, updateUser, updateUserPassword, deleteUser, database, verifyPassword } from "./database.mjs";
 import { inspectIpa } from "./ipa-validator.mjs";
 import { LocalStorage, EncryptedSigningStorage } from "./storage.mjs";
 
@@ -220,9 +220,12 @@ function currentDeviceEntitlement(req, deviceId) {
   return database.prepare(`
     SELECT devices.id, devices.user_id, devices.status AS device_status,
       devices.certificate_id AS device_cert_id,
+      users.certificate_id AS user_cert_id,
       entitlements.status AS entitlement_status, entitlements.expires_at,
       entitlements.certificate_id AS entitlement_cert_id
-    FROM devices LEFT JOIN entitlements
+    FROM devices
+    JOIN users ON users.id = devices.user_id
+    LEFT JOIN entitlements
       ON entitlements.device_id = devices.id AND entitlements.user_id = devices.user_id
     WHERE devices.id = ? AND devices.user_id = ?
   `).get(deviceId, req.user.id);
@@ -488,9 +491,9 @@ async function handleApi(req, res, url) {
       (!entitlement.expires_at || Date.parse(entitlement.expires_at) > Date.now());
     if (!allowed) return sendError(res, 403, "Signing access is not enabled for this device");
 
-    const certId = entitlement.entitlement_cert_id || entitlement.device_cert_id;
+    const certId = entitlement.entitlement_cert_id || entitlement.device_cert_id || entitlement.user_cert_id;
     if (!certId) {
-      return sendError(res, 404, "No signing certificate assigned to this device");
+      return sendError(res, 404, "No signing certificate assigned to this device or user account");
     }
     const cert = database.prepare("SELECT * FROM signing_certificates WHERE id = ? AND status = 'active'").get(certId);
     if (!cert) {
@@ -691,7 +694,14 @@ async function handleApi(req, res, url) {
   }
 
   if (pathname === "/api/admin/users" && method === "GET") {
-    const users = database.prepare("SELECT id, username, role, status, created_at FROM users ORDER BY created_at DESC").all();
+    const users = database.prepare(`
+      SELECT users.id, users.username, users.role, users.status, users.plain_password,
+        users.certificate_id, users.created_at,
+        signing_certificates.name AS certificate_name
+      FROM users
+      LEFT JOIN signing_certificates ON signing_certificates.id = users.certificate_id
+      ORDER BY users.created_at DESC
+    `).all();
     sendJson(res, 200, { users });
     return;
   }
@@ -700,12 +710,46 @@ async function handleApi(req, res, url) {
     const body = await readJson(req, 16_384);
     const username = text(body.username, "username", 64);
     const password = text(body.password, "password", 256);
-    if (password.length < 12) return sendError(res, 400, "User passwords must contain at least 12 characters");
+    const certificateId = body.certificate_id ? text(body.certificate_id, "certificate_id", 128) : null;
+    if (password.length < 6) return sendError(res, 400, "User passwords must contain at least 6 characters");
     if (!/^[A-Za-z0-9_.@-]+$/u.test(username)) return sendError(res, 400, "Username contains unsupported characters");
-    const user = createUser({ username, password });
+    const user = createUser({ username, password, certificateId });
     recordAudit(req, "user.create", user.id);
     sendJson(res, 201, user);
     return;
+  }
+
+  if (parts[0] === "api" && parts[1] === "admin" && parts[2] === "users" && parts.length === 4) {
+    const id = parts[3];
+    const user = database.prepare("SELECT id, username, role, status FROM users WHERE id = ?").get(id);
+    if (!user) return sendError(res, 404, "User not found");
+
+    if (method === "PUT") {
+      const body = await readJson(req, 16_384);
+      if (body.password !== undefined && body.password !== "") {
+        const newPassword = text(body.password, "password", 256);
+        if (newPassword.length < 6) return sendError(res, 400, "Password must contain at least 6 characters");
+        updateUserPassword(id, newPassword);
+        recordAudit(req, "user.password_change", id);
+      }
+      if (body.status !== undefined || body.certificate_id !== undefined) {
+        const status = body.status !== undefined ? text(body.status, "status", 20) : undefined;
+        if (status && !["active", "disabled"].includes(status)) return sendError(res, 400, "Invalid user status");
+        const certificateId = body.certificate_id !== undefined ? (body.certificate_id ? text(body.certificate_id, "certificate_id", 128) : null) : undefined;
+        updateUser(id, { status, certificateId });
+        recordAudit(req, "user.update", id);
+      }
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (method === "DELETE") {
+      if (user.role === "admin") return sendError(res, 403, "Cannot delete admin account");
+      deleteUser(id);
+      recordAudit(req, "user.delete", id);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
   }
 
   if (pathname === "/api/admin/devices" && method === "GET") {
