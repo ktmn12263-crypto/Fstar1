@@ -8,7 +8,20 @@ echo               Fplus Local Server Manager
 echo ========================================================
 echo.
 
-cd /d "%~dp0backend"
+set "SCRIPT_DIR=%~dp0"
+if exist "%SCRIPT_DIR%backend\src\server.mjs" (
+    cd /d "%SCRIPT_DIR%backend"
+) else if exist "%SCRIPT_DIR%Ksign-1.6\backend\src\server.mjs" (
+    cd /d "%SCRIPT_DIR%Ksign-1.6\backend"
+) else if exist "%SCRIPT_DIR%src\server.mjs" (
+    cd /d "%SCRIPT_DIR%"
+) else (
+    color 0C
+    echo [ERROR] Backend folder could not be found!
+    echo Please make sure this script is placed in the project directory.
+    pause
+    exit /b 1
+)
 
 set "NODE_CMD=node"
 where node >nul 2>&1
