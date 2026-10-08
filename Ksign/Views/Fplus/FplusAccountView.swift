@@ -123,15 +123,15 @@ struct FplusAccountView: View {
 					}
 				}
 			}
-
-			Section {
+		}
+		.toolbar {
+			ToolbarItem(placement: .topBarTrailing) {
 				NavigationLink {
 					SettingsView()
 				} label: {
-					Label("KSign App Settings", systemImage: "gearshape.2")
+					Image(systemName: "gearshape")
 				}
-			} header: {
-				Text("KSign Settings")
+				.accessibilityLabel(.localized("Settings"))
 			}
 		}
 		.alert(alertTitle, isPresented: $showAlert) {
