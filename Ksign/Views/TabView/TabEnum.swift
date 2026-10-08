@@ -60,7 +60,6 @@ enum TabEnum: String, CaseIterable, Hashable {
 	static var defaultTabs: [TabEnum] {
 		return [
 			.fplus,
-			.files,
 			.library,
 			.appstore,
 			.downloader,
@@ -69,6 +68,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 	
 	static var customizableTabs: [TabEnum] {
 		return [
+			.files,
 			.certificates,
 			.customPage
 		]

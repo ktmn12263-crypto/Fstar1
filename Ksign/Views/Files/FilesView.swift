@@ -35,9 +35,9 @@ struct FilesView: View {
     
     // MARK: - Initializers
     
-    init() {
+    init(isRootView: Bool = true) {
         self.directoryURL = nil
-        self.isRootView = true
+        self.isRootView = isRootView
         self._viewModel = StateObject(wrappedValue: FilesViewModel())
     }
     

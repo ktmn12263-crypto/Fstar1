@@ -161,6 +161,14 @@ struct LibraryView: View {
 						.disabled(_selectedApps.isEmpty)
 					}
 				} else {
+					ToolbarItem(placement: .topBarTrailing) {
+						NavigationLink {
+							FilesView(isRootView: false)
+						} label: {
+							Image(systemName: "folder")
+						}
+						.accessibilityLabel(.localized("Files"))
+					}
 					NBToolbarMenu(
 						systemImage: "plus",
 						style: .icon,
