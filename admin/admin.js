@@ -141,8 +141,10 @@ async function renderApps() {
           <h3>New version · ${escapeHTML(app.name)}</h3>
           <label>Version<input name="version" maxlength="32" placeholder="1.0.0" required></label>
           <label>Build<input name="build" maxlength="32" placeholder="1" required></label>
+          <label class="full">Download URL<input name="external_url" type="url" maxlength="2048" placeholder="https://telegram-drive.in/…"></label>
+          <p class="muted full" style="font-size:.8em;margin-top:0">Paste a direct .ipa download link (e.g. from telegram-drive.in). The app will be published immediately once a URL is provided.</p>
           <label class="full">What's New<textarea name="release_notes" maxlength="5000"></textarea></label>
-          <button class="primary" type="submit">Create version</button>
+          <button class="primary" type="submit">Create &amp; publish version</button>
         </form>
         <div class="panel"><h3>Upload app icon</h3><p class="muted">PNG, JPEG or WebP · max 10 MB</p><input class="file-control" type="file" accept="image/png,image/jpeg,image/webp" data-icon-file="${escapeHTML(app.id)}"><button class="secondary" type="button" data-upload-icon="${escapeHTML(app.id)}">Upload icon</button></div>
       </div></div>`).join("") : empty("Your app catalog is empty", "Use the form above to create your first app listing.")}</section>`;
@@ -166,14 +168,22 @@ async function renderApps() {
 }
 
 function versionRow(app, version) {
-  const size = version.file_size ? `${(version.file_size / 1024 / 1024).toFixed(1)} MB` : "IPA missing";
-  const upload = version.has_ipa ? "" : `<label class="file-pick">Choose IPA<input class="file-control" type="file" accept=".ipa,application/octet-stream" data-upload-file="${escapeHTML(version.id)}"></label><span data-file-label="${escapeHTML(version.id)}">No file chosen</span><button class="secondary" type="button" data-upload-ipa="${escapeHTML(version.id)}" data-app-id="${escapeHTML(app.id)}">Upload</button>`;
-  const canPublish = version.status !== "published" && version.has_ipa;
+  const hasDownload = version.has_ipa || version.external_url;
+  const sizeLabel = version.file_size ? `${(version.file_size / 1024 / 1024).toFixed(1)} MB` : (version.external_url ? "External URL" : "No download set");
+  const canPublish = version.status !== "published" && hasDownload;
   const publishButton = version.status === "published" ? "" : `<button class="quiet" type="button" data-publish-version="${escapeHTML(version.id)}" data-app-id="${escapeHTML(app.id)}" ${canPublish ? "" : "disabled"}>Publish version</button>`;
-  return `<div class="version-row"><div><div class="version-label">v${escapeHTML(version.version)} · build ${escapeHTML(version.build)}</div><div class="version-meta">${size} · ${escapeHTML(version.sha256 || "Waiting for IPA")} · ${escapeHTML(version.status)}</div>
-    <details><summary>Edit release notes</summary><form class="inline-form" data-version-edit="${escapeHTML(version.id)}" data-app-id="${escapeHTML(app.id)}">
-      <label>What's New<textarea name="release_notes" maxlength="5000">${escapeHTML(version.release_notes || "")}</textarea></label><button class="secondary" type="submit">Save notes</button>
-    </form></details></div><div class="row-actions">${upload}${publishButton}</div></div>`;
+  return `<div class="version-row"><div>
+    <div class="version-label">v${escapeHTML(version.version)} · build ${escapeHTML(version.build)}</div>
+    <div class="version-meta">${sizeLabel} · ${escapeHTML(version.status)}</div>
+    <details><summary>Edit version</summary>
+      <form class="inline-form" data-version-edit="${escapeHTML(version.id)}" data-app-id="${escapeHTML(app.id)}">
+        <label>What's New<textarea name="release_notes" maxlength="5000">${escapeHTML(version.release_notes || "")}</textarea></label>
+        <label>Download URL<input name="external_url" type="url" maxlength="2048" placeholder="https://telegram-drive.in/…" value="${escapeHTML(version.external_url || "")}"></label>
+        <p class="muted" style="font-size:.8em;margin-top:0">Paste a direct link from telegram-drive.in or any direct .ipa URL. Leave blank to use an uploaded IPA.</p>
+        <button class="secondary" type="submit">Save changes</button>
+      </form>
+    </details>
+  </div><div class="row-actions">${publishButton}</div></div>`;
 }
 
 async function createApp(event) {
@@ -193,11 +203,14 @@ async function createVersion(event) {
   event.preventDefault();
   const appId = event.currentTarget.dataset.versionForm;
   const form = new FormData(event.currentTarget);
+  const externalUrl = form.get("external_url")?.trim() || null;
   try {
     await api(`/api/admin/apps/${encodeURIComponent(appId)}/versions`, { method: "POST", body: {
-      version: form.get("version"), build: form.get("build"), release_notes: form.get("release_notes")
+      version: form.get("version"), build: form.get("build"), release_notes: form.get("release_notes"),
+      external_url: externalUrl,
+      status: externalUrl ? "published" : "draft"
     } });
-    inform("Version created. Upload its IPA before publishing.");
+    inform(externalUrl ? "Version created and published!" : "Version created as draft. Add a download URL to publish.");
     await renderApps();
   } catch (error) { inform(error.message, true); }
 }
@@ -220,11 +233,16 @@ async function updateVersion(event) {
   const appId = event.currentTarget.dataset.appId;
   const versionId = event.currentTarget.dataset.versionEdit;
   const form = new FormData(event.currentTarget);
+  const externalUrl = form.get("external_url")?.trim() || null;
   try {
     await api(`/api/admin/apps/${encodeURIComponent(appId)}/versions/${encodeURIComponent(versionId)}`, {
-      method: "PUT", body: { release_notes: form.get("release_notes") }
+      method: "PUT", body: {
+        release_notes: form.get("release_notes"),
+        external_url: externalUrl,
+        status: externalUrl ? "published" : undefined
+      }
     });
-    inform("Release notes saved.");
+    inform("Version saved.");
     await renderApps();
   } catch (error) { inform(error.message, true); }
 }

@@ -30,7 +30,7 @@ struct FplusStoreVersion: Decodable, Identifiable, Hashable {
 	let version: String
 	let build: String
 	let downloadSize: Int64
-	let sha256: String
+	let sha256: String?
 	let releaseNotes: String
 	let publishedAt: String?
 	let downloadURL: String
@@ -200,8 +200,12 @@ struct FplusAPIClient {
 		defer { try? FileManager.default.removeItem(at: temporaryURL) }
 		try validate(response, data: nil)
 
-		guard try Self.sha256(of: temporaryURL).caseInsensitiveCompare(version.sha256) == .orderedSame else {
-			throw APIError.checksumMismatch
+		// Only verify SHA-256 when the server supplied a checksum (local IPA uploads).
+		// External download URLs (e.g. from telegram-drive.in) don't have a stored hash.
+		if let expected = version.sha256, !expected.isEmpty {
+			guard try Self.sha256(of: temporaryURL).caseInsensitiveCompare(expected) == .orderedSame else {
+				throw APIError.checksumMismatch
+			}
 		}
 
 		let downloadsDirectory = URL.documentsDirectory.appending(path: "FplusDownloads", directoryHint: .isDirectory)

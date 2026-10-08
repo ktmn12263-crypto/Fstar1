@@ -37,7 +37,7 @@ const appById = database.prepare("SELECT * FROM apps WHERE id = ?");
 const versionById = database.prepare("SELECT * FROM app_versions WHERE id = ? AND app_id = ?");
 const latestVersion = database.prepare(`
   SELECT * FROM app_versions
-  WHERE app_id = ? AND status = 'published' AND ipa_path IS NOT NULL
+  WHERE app_id = ? AND status = 'published' AND (ipa_path IS NOT NULL OR external_url IS NOT NULL)
   ORDER BY published_at DESC, created_at DESC LIMIT 1
 `);
 
@@ -212,7 +212,7 @@ function publicApp(row) {
     download_size: latest?.file_size ?? 0,
     published_at: latest?.published_at ?? row.created_at,
     sha256: latest?.sha256 ?? null,
-    download_url: latest?.ipa_path ? `/api/store/apps/${row.id}/versions/${latest.id}/download` : null
+    download_url: latest?.ipa_path ? `/api/store/apps/${row.id}/versions/${latest.id}/download` : (latest?.external_url || null)
   };
 }
 
@@ -368,12 +368,16 @@ async function handleApi(req, res, url) {
     const app = appById.get(parts[3]);
     if (!app || app.status !== "published" || !latestVersion.get(app.id)) return sendError(res, 404, "App not found");
     const versions = database.prepare(`
-      SELECT id, version, build, file_size AS download_size, sha256, release_notes, published_at
-      FROM app_versions WHERE app_id = ? AND status = 'published' AND ipa_path IS NOT NULL
+      SELECT id, version, build, file_size AS download_size, sha256, release_notes, published_at, ipa_path, external_url
+      FROM app_versions WHERE app_id = ? AND status = 'published' AND (ipa_path IS NOT NULL OR external_url IS NOT NULL)
       ORDER BY published_at DESC
     `).all(app.id).map((version) => ({
       ...version,
-      download_url: `/api/store/apps/${app.id}/versions/${version.id}/download`
+      ipa_path: undefined,
+      external_url: undefined,
+      download_url: version.ipa_path
+        ? `/api/store/apps/${app.id}/versions/${version.id}/download`
+        : (version.external_url || null)
     }));
     sendJson(res, 200, { app: publicApp(app), versions });
     return;
@@ -537,7 +541,7 @@ async function handleApi(req, res, url) {
 
   if (pathname === "/api/admin/apps" && method === "GET") {
     const apps = database.prepare("SELECT * FROM apps WHERE status != 'archived' ORDER BY updated_at DESC").all();
-    sendJson(res, 200, { apps: apps.map((row) => ({ ...publicApp(row), status: row.status, description: row.description, category: row.category, versions: database.prepare("SELECT id, version, build, file_size, sha256, release_notes, status, published_at, ipa_path IS NOT NULL AS has_ipa FROM app_versions WHERE app_id = ? ORDER BY created_at DESC").all(row.id) })) });
+    sendJson(res, 200, { apps: apps.map((row) => ({ ...publicApp(row), status: row.status, description: row.description, category: row.category, versions: database.prepare("SELECT id, version, build, file_size, sha256, release_notes, status, published_at, external_url, ipa_path IS NOT NULL AS has_ipa FROM app_versions WHERE app_id = ? ORDER BY created_at DESC").all(row.id) })) });
     return;
   }
 
@@ -605,18 +609,18 @@ async function handleApi(req, res, url) {
     const version = text(body.version, "version", 32);
     const build = text(body.build, "build", 32);
     const releaseNotes = text(body.release_notes, "release_notes", 5000, false);
+    const externalUrl = body.external_url ? text(body.external_url, "external_url", 2048, false) : null;
     const status = body.status === undefined ? "draft" : text(body.status, "status", 20);
     if (!["draft", "published"].includes(status)) return sendError(res, 400, "Invalid version status");
+    if (status === "published" && !externalUrl) return sendError(res, 409, "Provide a download URL or upload an IPA before publishing");
     const id = randomUUID();
     const timestamp = now();
-    database.prepare("INSERT INTO app_versions (id, app_id, version, build, release_notes, status, created_at) VALUES (?, ?, ?, ?, ?, 'draft', ?)")
-      .run(id, appId, version, build, releaseNotes, timestamp);
-    if (status === "published") {
-      database.prepare("DELETE FROM app_versions WHERE id = ?").run(id);
-      return sendError(res, 409, "Upload an IPA before publishing this version");
-    }
+    const publishedAt = status === "published" ? timestamp : null;
+    database.prepare("INSERT INTO app_versions (id, app_id, version, build, release_notes, external_url, status, published_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(id, appId, version, build, releaseNotes, externalUrl, status, publishedAt, timestamp);
+    if (status === "published") database.prepare("UPDATE apps SET status = 'published', updated_at = ? WHERE id = ?").run(timestamp, appId);
     recordAudit(req, "version.create", id);
-    sendJson(res, 201, { id, app_id: appId, version, build, status: "draft" });
+    sendJson(res, 201, { id, app_id: appId, version, build, status, external_url: externalUrl });
     return;
   }
 
@@ -631,15 +635,16 @@ async function handleApi(req, res, url) {
       const versionName = body.version === undefined ? version.version : text(body.version, "version", 32);
       const build = body.build === undefined ? version.build : text(body.build, "build", 32);
       const releaseNotes = body.release_notes === undefined ? version.release_notes : text(body.release_notes, "release_notes", 5000, false);
+      const externalUrl = body.external_url === undefined ? version.external_url : (body.external_url ? text(body.external_url, "external_url", 2048, false) : null);
       const status = body.status === undefined ? version.status : text(body.status, "status", 20);
       if (!["draft", "published"].includes(status)) return sendError(res, 400, "Invalid version status");
-      if (status === "published" && !version.ipa_path) return sendError(res, 409, "Upload an IPA before publishing this version");
+      if (status === "published" && !version.ipa_path && !externalUrl) return sendError(res, 409, "Provide a download URL or upload an IPA before publishing");
       const publishedAt = status === "published" ? version.published_at || now() : null;
-      database.prepare("UPDATE app_versions SET version = ?, build = ?, release_notes = ?, status = ?, published_at = ? WHERE id = ?")
-        .run(versionName, build, releaseNotes, status, publishedAt, versionId);
+      database.prepare("UPDATE app_versions SET version = ?, build = ?, release_notes = ?, external_url = ?, status = ?, published_at = ? WHERE id = ?")
+        .run(versionName, build, releaseNotes, externalUrl, status, publishedAt, versionId);
       if (status === "published") database.prepare("UPDATE apps SET status = 'published', updated_at = ? WHERE id = ?").run(now(), appId);
       recordAudit(req, "version.update", versionId);
-      sendJson(res, 200, { id: versionId, version: versionName, build, status });
+      sendJson(res, 200, { id: versionId, version: versionName, build, status, external_url: externalUrl });
       return;
     }
     if (method === "DELETE") {
